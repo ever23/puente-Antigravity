@@ -29,7 +29,7 @@
         }
 
         body {
-            background-color: var(--bg-color);
+            background-color: var(--bg-color) !important;
             color: var(--text-main);
             height: 100dvh;
             display: flex;
@@ -114,6 +114,11 @@
             color: var(--text-main);
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
+            resize: none;
+            font-family: inherit;
+            line-height: 1.4;
+            max-height: 150px;
+            overflow-y: auto;
         }
 
         #prompt-input:focus {
@@ -168,6 +173,45 @@
             background: var(--glass-bg);
             transform: scale(0.95);
         }
+
+        /* Estilos para respuestas estructuradas tipo JSON */
+        .ag-json-response {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+        .ag-msg {
+            font-size: 0.95rem;
+        }
+        .ag-status {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: right;
+            margin-top: 0.2rem;
+            text-transform: uppercase;
+        }
+        .ag-status span {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--primary-accent);
+            padding: 0.2rem 0.5rem;
+            border-radius: 1rem;
+            font-weight: 600;
+        }
+        .ag-plan {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.8rem;
+            border-radius: 0.5rem;
+            border-left: 2px solid var(--primary-accent);
+        }
+        .ag-plan ul {
+            padding-left: 1.5rem;
+            margin-top: 0.4rem;
+        }
+        .ag-plan li {
+            font-size: 0.85rem;
+            color: #d1d5db;
+            margin-bottom: 0.3rem;
+        }
     </style>
 </head>
 
@@ -175,6 +219,9 @@
     <header style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem;">
         <h1 style="margin: 0;">PUENTE ANTIGRAVITY</h1>
         <button id="clear-btn" title="Limpiar chat">🗑️</button>
+        <button id="logout-btn" title="Cerrar Sesión"
+            style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; border-radius: 0.5rem; padding: 0.4rem 0.6rem; cursor: pointer;">🚪
+            Salir</button>
     </header>
 
 
@@ -185,7 +232,7 @@
     </div>
 
     <div class="footer">
-        <input type="text" id="prompt-input" placeholder="Enviar una instrucción..." autocomplete="off">
+        <textarea id="prompt-input" placeholder="Enviar una instrucción (Shift+Enter para salto de línea)..." rows="1"></textarea>
         <button id="send-btn">
             <svg viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -210,6 +257,16 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        // Función auxiliar para integrar HTML renderizado desde JSON
+        function addHTMLMessage(htmlContent, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.innerHTML = htmlContent;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+
         // 3. Escuchar respuestas del servidor
         socket.on('connect', () => {
             addMessage('🟢 Conectado al IDE Antigravity', 'received');
@@ -230,12 +287,50 @@
             const loadingMsg = document.getElementById('loading-msg');
             if (loadingMsg) loadingMsg.remove();
 
-            // Mostrar la respuesta real del agente
-            addMessage('🤖 ' + data.response, 'received');
+            try {
+                // Limpiar posibles bloques markdown del raw JSON
+                let cleanJson = data.response.trim();
+                if (cleanJson.startsWith('```json')) {
+                    cleanJson = cleanJson.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+                } else if (cleanJson.startsWith('```')) {
+                    cleanJson = cleanJson.replace(/^```\n?/, '').replace(/\n?```$/, '');
+                }
+                
+                const parsed = JSON.parse(cleanJson);
+                
+                // Construir la vista estructurada si es JSON válido
+                let html = `<div class="ag-json-response">`;
+                if (parsed.mensaje) {
+                    html += `<div class="ag-msg">🤖 ${parsed.mensaje}</div>`;
+                } else {
+                    html += `<div class="ag-msg">🤖 Respuesta recibida</div>`;
+                }
+                
+                if (parsed.plan && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
+                    html += `<div class="ag-plan"><strong>Plan de Acción:</strong><ul>`;
+                    parsed.plan.forEach(item => {
+                        html += `<li>${item}</li>`;
+                    });
+                    html += `</ul></div>`;
+                }
+                
+                if (parsed.estado) {
+                    html += `<div class="ag-status">Estado: <span>${parsed.estado}</span></div>`;
+                }
+                html += `</div>`;
+                
+                addHTMLMessage(html, 'received');
+            } catch (err) {
+                // Fallback si la respuesta no es JSON válido
+                addMessage('🤖 ' + data.response, 'received');
+            }
         });
 
         socket.on('error', (data) => {
             addMessage('❌ Error: ' + data.message, 'received');
+        });
+        socket.on('logout', (data) => {
+            window.location.href = 'login.html';
         });
 
         // 4. Función para enviar al pulsar el botón o dar Enter
@@ -251,13 +346,26 @@
 
             // Limpiar input
             promptInput.value = '';
+            promptInput.style.height = 'auto'; // reset height
             promptInput.focus();
         }
 
         // Eventos de los botones
         sendBtn.addEventListener('click', sendPrompt);
-        promptInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendPrompt();
+        promptInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendPrompt();
+            }
+        });
+
+        // Auto-resize del textarea
+        promptInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+            if (this.value === '') {
+                this.style.height = 'auto';
+            }
         });
         const clearBtn = document.getElementById('clear-btn');
 
@@ -268,6 +376,29 @@
                     ¡Hola! Escribe un prompt para enviarlo directamente a tu IDE.
                 </div>
             `;
+        });
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            try {
+                // Llamada AJAX al servidor
+                const response = await fetch('/api/logout', {
+                    method: 'POST', // Usamos POST por seguridad para acciones que cambian estado
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    // Efecto visual antes de salir
+                    document.body.style.opacity = '0';
+                    document.body.style.transition = 'opacity 0.5s';
+
+                    setTimeout(() => {
+                        window.location.href = 'login.html'; // Redirección final
+                    }, 500);
+                } else {
+                    console.error('Error al cerrar sesión');
+                }
+            } catch (error) {
+                console.error('Error de red:', error);
+            }
         });
     </script>
 </body>

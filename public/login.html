@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Puente Antigravity - Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0d12;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --primary-accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.2);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --bubble-user: #1e1b4b;
+            --bubble-ag: #1e293b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+        }
+
+        .login-card {
+            width: 90%;
+            max-width: 400px;
+            padding: 2.5rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-bg);
+            border-radius: 1.5rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-accent);
+            letter-spacing: -0.025em;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            margin-left: 0.2rem;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-bg);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            color: var(--text-main);
+            outline: none;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--primary-accent);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        #login-btn {
+            width: 100%;
+            background-color: var(--primary-accent);
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s, box-shadow 0.2s;
+            margin-top: 1rem;
+        }
+
+        #login-btn:hover {
+            opacity: 0.9;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        #login-btn:active {
+            transform: scale(0.98);
+        }
+
+        .footer-link {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .footer-link a {
+            color: var(--primary-accent);
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-card">
+        <div class="header">
+            <h1>Antigravity</h1>
+            <p>Ingresa para conectar con tu IDE</p>
+        </div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" placeholder="••••••••" required>
+            </div>
+
+            <button type="submit" id="login-btn">Acceder al Puente</button>
+        </form>
+
+        <div class="footer-link">
+            ¿Problemas de conexión? <a href="#">Soporte</a>
+        </div>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('login-form');
+        const loginBtn = document.getElementById('login-btn');
+        const passwordInput = document.getElementById('password');
+
+        // Crear un elemento para mostrar errores dinámicamente
+        const errorMsg = document.createElement('p');
+        errorMsg.style.color = '#ef4444';
+        errorMsg.style.fontSize = '0.85rem';
+        errorMsg.style.marginTop = '1rem';
+        errorMsg.style.textAlign = 'center';
+        errorMsg.style.display = 'none';
+        loginForm.appendChild(errorMsg);
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Reset de estados
+            errorMsg.style.display = 'none';
+            const originalText = loginBtn.textContent;
+            loginBtn.textContent = 'Verificando...';
+            loginBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: passwordInput.value })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // VERIFICACIÓN EXITOSA
+                    loginBtn.textContent = 'Acceso Concedido';
+                    loginBtn.style.backgroundColor = '#22c55e';
+
+                    // Redirección directa a index.html
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 600);
+                } else {
+                    // Error devuelto por la API
+                    throw new Error(result.message || 'Contraseña incorrecta');
+                }
+
+            } catch (error) {
+                // Manejo de error visual
+                loginBtn.textContent = originalText;
+                loginBtn.disabled = false;
+                errorMsg.textContent = '❌ ' + error.message;
+                errorMsg.style.display = 'block';
+
+                // Efecto de sacudida opcional para el input
+                passwordInput.style.borderColor = '#ef4444';
+                setTimeout(() => passwordInput.style.borderColor = 'var(--glass-bg)', 2000);
+
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        });
+    </script>
+</body>
+
+</html>

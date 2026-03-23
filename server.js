@@ -1,20 +1,34 @@
 const express = require('express');
+const sharedsession = require("express-socket.io-session");
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const Antigravity = require('./webSocket/Antigravity.js');
 const { Server } = require('socket.io');
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const session = require('express-session');
+const sessionMiddleware = session({
+    secret: "antigravity_secret_key", // Usa una frase segura
+    resave: true,
+    saveUninitialized: true,
+    cookie: { secure: false } // Ponlo en true solo si usas HTTPS
+});
+app.use(sessionMiddleware);
+io.use(sharedsession(sessionMiddleware, {
+    autoSave: true
+}));
+
+require('dotenv').config();
 const port = 3000;
 
 app.use(express.json());
-app.use(express.static('public'));
 
-const AG_PATH = 'C:\\Users\\HP 430 G6\\AppData\\Local\\Programs\\Antigravity\\bin\\antigravity.cmd';
-const RESPONSE_FILE = path.join(__dirname, 'response.txt');
+
+const AG_PATH = process.env.AG_PATH;
+const RESPONSE_FILE = path.join(__dirname, 'response.json');
 
 // Limpiar respuesta al iniciar
 try { fs.writeFileSync(RESPONSE_FILE, ''); } catch (e) { }
@@ -33,7 +47,8 @@ function startResponseWatcher() {
                 if (response) {
                     console.log(`[WS] Respuesta del agente recibida (${response.length} chars) → emitiendo a clientes`);
                     io.emit('agent_response', { response });
-                    fs.writeFileSync(RESPONSE_FILE, ''); // Limpiar para próxima respuesta
+                    // Limpiar para próxima respuesta
+                    fs.writeFileSync(RESPONSE_FILE, '');
                 }
             } catch (e) { }
         }, 1500);
@@ -42,102 +57,66 @@ function startResponseWatcher() {
 
 startResponseWatcher();
 
+
 // WebSocket: gestión de conexiones
-io.on('connection', (socket) => {
-    console.log(`[WS] Cliente conectado: ${socket.id}`);
-    socket.emit('connected', { message: '¡Conectado al Puente Antigravity!' });
+Antigravity(io, RESPONSE_FILE);
+// Middleware de protección
+const authRequired = (req, res, next) => {
+    if (req.session.isLoggedIn) {
+        next(); // Está logueado, puede pasar
+    } else {
+        res.redirect('/login.html'); // No está logueado, ¡al login!
+    }
+};
 
-    socket.on('send_prompt', ({ prompt }) => {
-        if (!prompt) return;
-        console.log(`[WS] Prompt recibido: "${prompt}"`);
-
-        const hiddenInstruction = `\n\n[SISTEMA: Después de responder al usuario, guarda tu respuesta completa en el archivo "${RESPONSE_FILE}" usando el tool de escritura de archivos. Todo el contenido de la respuesta e instucciones junto con el plan si lo hay.]`;
-
-        const fullPrompt = prompt + hiddenInstruction;
-
-        const psScript = `
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type @"
-        using System;
-        using System.Diagnostics;
-        using System.Runtime.InteropServices;
-        using System.Text;
-        public class Win32 {
-            public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-            [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
-            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-            [DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder sb, int max);
-            
-            public static bool ActivateIDE() {
-                bool found = false;
-                EnumWindows((hWnd, lParam) => {
-                    if (IsWindowVisible(hWnd)) {
-                        StringBuilder sb = new StringBuilder(256);
-                        GetWindowText(hWnd, sb, 256);
-                        if (sb.Length > 0) {
-                            uint pid;
-                            GetWindowThreadProcessId(hWnd, out pid);
-                            try {
-                                Process p = Process.GetProcessById((int)pid);
-                                if (p.ProcessName.IndexOf("Antigravity", StringComparison.OrdinalIgnoreCase) >= 0) {
-                                    ShowWindow(hWnd, 5); // SW_SHOW
-                                    SetForegroundWindow(hWnd);
-                                    found = true;
-                                    return false;
-                                }
-                            } catch {}
-                        }
-                    }
-                    return true;
-                }, IntPtr.Zero);
-                return found;
-            }
-        }
-"@
-
-        $found = [Win32]::ActivateIDE()
-        
-        if ($found) {
-            Start-Sleep -Milliseconds 800
-            Set-Clipboard -Value $env:PROMPT_TEXT
-            [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Milliseconds 400
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-        } else {
-            Write-Error "No se encontro la ventana nativa de Antigravity"
-            exit 1
-        }
-        `;
-
-        const scriptPath = path.join(__dirname, 'inject.ps1');
-        fs.writeFileSync(scriptPath, psScript);
-        const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`;
-
-        // Notificar al cliente que el prompt fue enviado
-        socket.emit('prompt_sent', { message: 'Prompt enviado al agente, esperando respuesta...' });
-
-        exec(command, { env: { ...process.env, PROMPT_TEXT: fullPrompt } }, (error) => {
-            if (error) {
-                console.error(`[WS] Error al inyectar: ${error.message}`);
-                socket.emit('error', { message: 'No se pudo enfocar Antigravity.' });
-            } else {
-                console.log('[WS] Prompt inyectado exitosamente.');
-            }
-        });
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`[WS] Cliente desconectado: ${socket.id}`);
-    });
+// Aplicar el guardián a la página principal
+app.get('/', authRequired, (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
 });
 
+app.get('/index.html', authRequired, (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
+app.use(express.static('public'));
 // Endpoint REST legado (por compatibilidad)
 app.post('/api/prompt', (req, res) => {
     res.json({ status: 'info', message: 'Usa WebSocket (socket.io) para comunicación en tiempo real.' });
 });
+app.post('/api/logout', (req, res) => {
+    // Destruimos la sesión en el servidor
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ status: 'error', message: 'No se pudo cerrar la sesión' });
+        }
+
+        // Limpiamos la cookie del lado del cliente
+        res.clearCookie('connect.sid');
+
+        // Respondemos éxito para que el AJAX sepa que puede redirigir
+        res.status(200).json({ status: 'ok', message: 'Sesión terminada' });
+    });
+});
+app.post('/api/login', (req, res) => {
+    const { password } = req.body; // Extraemos la clave del cuerpo de la petición
+    const masterPassword = process.env.APP_PASSWORD; // Obtenemos la clave del .env
+
+    // Verificamos si la contraseña coincide
+    if (password === masterPassword) {
+        req.session.isLoggedIn = true;
+        // Éxito: Enviamos status 200 para que el AJAX redirija
+        return res.status(200).json({
+            status: 'ok',
+            message: 'Acceso concedido.'
+        });
+    } else {
+        // Fallo: Enviamos status 401 (No autorizado)
+        return res.status(401).json({
+            status: 'error',
+            message: 'Contraseña incorrecta.'
+        });
+    }
+});
+
 
 server.listen(port, '0.0.0.0', () => {
     console.log(`Servidor Puente-Antigravity escuchando en http://0.0.0.0:${port}`);
