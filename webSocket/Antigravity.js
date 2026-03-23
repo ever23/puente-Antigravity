@@ -25,69 +25,20 @@ module.exports = (io, RESPONSE_FILE) => {
 
             const fullPrompt = prompt + hiddenInstruction;
 
-            const psScript = `
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type @"
-        using System;
-        using System.Diagnostics;
-        using System.Runtime.InteropServices;
-        using System.Text;
-        public class Win32 {
-            public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-            [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
-            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-            [DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder sb, int max);
-            
-            public static bool ActivateIDE() {
-                bool found = false;
-                EnumWindows((hWnd, lParam) => {
-                    if (IsWindowVisible(hWnd)) {
-                        StringBuilder sb = new StringBuilder(256);
-                        GetWindowText(hWnd, sb, 256);
-                        if (sb.Length > 0) {
-                            uint pid;
-                            GetWindowThreadProcessId(hWnd, out pid);
-                            try {
-                                Process p = Process.GetProcessById((int)pid);
-                                if (p.ProcessName.IndexOf("Antigravity", StringComparison.OrdinalIgnoreCase) >= 0) {
-                                    ShowWindow(hWnd, 5); // SW_SHOW
-                                    SetForegroundWindow(hWnd);
-                                    found = true;
-                                    return false;
-                                }
-                            } catch {}
-                        }
-                    }
-                    return true;
-                }, IntPtr.Zero);
-                return found;
+
+            let command = '';
+            if (process.platform === 'win32') {
+                const scriptPath = path.join(__dirname, 'inject.ps1');
+                command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`;
+                socket.emit('prompt_sent', { message: 'Prompt enviado (Windows), esperando respuesta...' });
+            } else if (process.platform === 'linux') {
+                const scriptPath = path.join(__dirname, 'inject.sh');
+                command = `bash "${scriptPath}"`;
+                socket.emit('prompt_sent', { message: 'Prompt enviado (Linux), esperando respuesta...' });
+            } else {
+                console.error(`[WS] Plataforma SO no soportada (${process.platform})`);
+                return socket.emit('error', { message: `Plataforma SO no soportada (${process.platform})` });
             }
-        }
-"@
-
-        $found = [Win32]::ActivateIDE()
-        
-        if ($found) {
-            Start-Sleep -Milliseconds 800
-            Set-Clipboard -Value $env:PROMPT_TEXT
-            [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Milliseconds 400
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-        } else {
-            Write-Error "No se encontro la ventana nativa de Antigravity"
-            exit 1
-        }
-        `;
-
-            const scriptPath = path.join(__dirname, 'inject.ps1');
-            fs.writeFileSync(scriptPath, psScript);
-            const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`;
-
-            // Notificar al cliente que el prompt fue enviado
-            socket.emit('prompt_sent', { message: 'Prompt enviado al agente, esperando respuesta...' });
 
             exec(command, { env: { ...process.env, PROMPT_TEXT: fullPrompt } }, (error) => {
                 if (error) {
