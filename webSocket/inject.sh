@@ -16,6 +16,10 @@ sleep 0.8
 # Pegar la variable de entorno PROMPT_TEXT en el portapapeles
 echo -n "$PROMPT_TEXT" | xclip -selection clipboard
 
+# Simular Ctrl+L para garantizar que la caja del chat obtiene el foco
+xdotool key ctrl+l
+sleep 0.2
+
 # Simular Ctrl+V y Enter
 xdotool key ctrl+v
 sleep 0.4

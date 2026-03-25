@@ -13,6 +13,7 @@
             [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
             [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
             [DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder sb, int max);
+            [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
             
             public static bool ActivateIDE() {
                 bool found = false;
@@ -26,7 +27,11 @@
                             try {
                                 Process p = Process.GetProcessById((int)pid);
                                 if (p.ProcessName.IndexOf("Antigravity", StringComparison.OrdinalIgnoreCase) >= 0) {
-                                    ShowWindow(hWnd, 5); // SW_SHOW
+                                    // Rompemos el bloqueo de foco de Windows simulando la pulsación de la tecla ALT
+                                    keybd_event(0x12, 0, 0, 0); // Alt press
+                                    keybd_event(0x12, 0, 2, 0); // Alt release
+                                    
+                                    ShowWindow(hWnd, 9); // SW_RESTORE (9) des-minimiza si estaba oculta
                                     SetForegroundWindow(hWnd);
                                     found = true;
                                     return false;
@@ -46,6 +51,8 @@
         if ($found) {
             Start-Sleep -Milliseconds 800
             Set-Clipboard -Value $env:PROMPT_TEXT
+            [System.Windows.Forms.SendKeys]::SendWait("^l")
+            Start-Sleep -Milliseconds 200
             [System.Windows.Forms.SendKeys]::SendWait("^v")
             Start-Sleep -Milliseconds 400
             [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")

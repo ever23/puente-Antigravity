@@ -9,6 +9,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    
+    <!-- Librerías para Markdown y Syntax Highlighting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
     <style>
         :root {
             --bg-color: #0d0d12;
@@ -212,9 +218,11 @@
             flex-direction: column;
             gap: 0.8rem;
         }
+
         .ag-msg {
             font-size: 0.95rem;
         }
+
         .ag-status {
             font-size: 0.75rem;
             color: var(--text-muted);
@@ -222,6 +230,7 @@
             margin-top: 0.2rem;
             text-transform: uppercase;
         }
+
         .ag-status span {
             background: rgba(99, 102, 241, 0.2);
             color: var(--primary-accent);
@@ -229,21 +238,153 @@
             border-radius: 1rem;
             font-weight: 600;
         }
+
         .ag-plan {
             background: rgba(0, 0, 0, 0.2);
             padding: 0.8rem;
             border-radius: 0.5rem;
             border-left: 2px solid var(--primary-accent);
         }
+
         .ag-plan ul {
             padding-left: 1.5rem;
             margin-top: 0.4rem;
         }
+
         .ag-plan li {
             font-size: 0.85rem;
             color: #d1d5db;
             margin-bottom: 0.3rem;
         }
+
+        /* Estilos Markdown */
+        .message pre {
+            background: #1e1e2e;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            margin: 0.8rem 0;
+            overflow-x: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .message code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+            background: rgba(0,0,0,0.3);
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.25rem;
+        }
+
+        .message pre code {
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .message ul, .message ol {
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+        }
+
+        .message p {
+            margin-bottom: 0.5rem;
+        }
+        .message p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Estilos Terminal Remota */
+        #terminal-toggle {
+            position: fixed;
+            bottom: 5.5rem;
+            right: 1.5rem;
+            background: var(--primary-accent);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 3.5rem;
+            height: 3.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+            z-index: 100;
+            transition: transform 0.2s;
+        }
+
+        #terminal-toggle:active { transform: scale(0.9); }
+
+        #terminal-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40vh;
+            background: #11111b;
+            border-top: 1px solid var(--primary-accent);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .terminal-header {
+            padding: 0.8rem 1.2rem;
+            background: #181825;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        #terminal-output {
+            flex: 1;
+            padding: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            color: #a6adc8;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            background: #000;
+        }
+
+        .terminal-input-area {
+            padding: 0.8rem;
+            background: #181825;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #term-input {
+            flex: 1;
+            background: #11111b;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 0.4rem;
+            padding: 0.5rem;
+            color: #cdd6f4;
+            font-family: monospace;
+        }
+
+        .btn-suggested {
+            background: #313244;
+            border: 1px solid var(--primary-accent);
+            color: var(--primary-accent);
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.4rem;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+
     </style>
 </head>
 
@@ -253,7 +394,8 @@
         <div class="header-actions">
             <button id="clear-btn" title="Limpiar chat">🗑️</button>
             <button id="logout-btn" title="Cerrar Sesión">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                     <polyline points="16 17 21 12 16 7"></polyline>
                     <line x1="21" y1="12" x2="9" y2="12"></line>
@@ -270,15 +412,32 @@
         </div>
     </div>
 
+    <button id="terminal-toggle" title="Abrir Terminal">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+    </button>
+
+    <div id="terminal-panel">
+        <div class="terminal-header">
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--primary-accent);">TERMINAL REMOTA</span>
+            <button onclick="document.getElementById('terminal-panel').style.display='none'" style="background:transparent; border:none; color:white; cursor:pointer;">✕</button>
+        </div>
+        <div id="terminal-output">Esperando comandos...</div>
+        <div class="terminal-input-area">
+            <input type="text" id="term-input" placeholder="Comando de sistema...">
+            <button id="term-send" style="background: var(--primary-accent); border:none; color:white; padding:0 1rem; border-radius:0.4rem;">sh</button>
+        </div>
+    </div>
+    
     <div class="footer">
-        <textarea id="prompt-input" placeholder="Enviar una instrucción (Shift+Enter para salto de línea)..." rows="1"></textarea>
+        <textarea id="prompt-input" disabled placeholder="Enviar una instrucción (Shift+Enter para salto de línea)..."
+            rows="1"></textarea>
         <button id="send-btn">
             <svg viewBox="0 0 24 24">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
             </svg>
         </button>
     </div>
-
+    
     <script>
         const chatContainer = document.getElementById('chat-container');
         const promptInput = document.getElementById('prompt-input');
@@ -309,6 +468,7 @@
         // 3. Escuchar respuestas del servidor
         socket.on('connect', () => {
             addMessage('🟢 Conectado al IDE Antigravity', 'received');
+            document.getElementById("prompt-input").removeAttribute("disabled")
         });
 
         socket.on('prompt_sent', (data) => {
@@ -334,34 +494,51 @@
                 } else if (cleanJson.startsWith('```')) {
                     cleanJson = cleanJson.replace(/^```\n?/, '').replace(/\n?```$/, '');
                 }
-                
+
                 const parsed = JSON.parse(cleanJson);
-                
+
                 // Construir la vista estructurada si es JSON válido
                 let html = `<div class="ag-json-response">`;
                 if (parsed.mensaje) {
-                    html += `<div class="ag-msg">🤖 ${parsed.mensaje}</div>`;
+                    // Renderizar el mensaje principal con Markdown
+                    const renderedMsg = marked.parse(parsed.mensaje);
+                    html += `<div class="ag-msg">🤖 ${renderedMsg}</div>`;
                 } else {
                     html += `<div class="ag-msg">🤖 Respuesta recibida</div>`;
                 }
-                
+
+                if (parsed.comando_sugerido) {
+                    const encodedCmd = btoa(unescape(encodeURIComponent(parsed.comando_sugerido)));
+                    html += `<div style="margin-top:0.5rem;">
+                        <span style="font-size:0.7rem; color:var(--text-muted); display:block;">PROPUESA DE COMANDO:</span>
+                        <code style="display:block; margin: 0.3rem 0;">${parsed.comando_sugerido}</code>
+                        <button class="btn-suggested" onclick="fillAndShowTerminal(atob('${encodedCmd}'))">⚡ Autocompletar Terminal</button>
+                    </div>`;
+                }
+
                 if (parsed.plan && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
                     html += `<div class="ag-plan"><strong>Plan de Acción:</strong><ul>`;
                     parsed.plan.forEach(item => {
-                        html += `<li>${item}</li>`;
+                        // También permitimos markdown ligero en los items del plan
+                        html += `<li>${marked.parseInline(item)}</li>`;
                     });
                     html += `</ul></div>`;
                 }
-                
+
                 if (parsed.estado) {
                     html += `<div class="ag-status">Estado: <span>${parsed.estado}</span></div>`;
                 }
                 html += `</div>`;
-                
+
                 addHTMLMessage(html, 'received');
+                
+                // Disparar resaltado de sintaxis
+                hljs.highlightAll();
             } catch (err) {
-                // Fallback si la respuesta no es JSON válido
-                addMessage('🤖 ' + data.response, 'received');
+                // Fallback si la respuesta no es JSON válido: Renderizar como Markdown
+                const renderedFallback = marked.parse(data.response);
+                addHTMLMessage('🤖 ' + renderedFallback, 'received');
+                hljs.highlightAll();
             }
         });
 
@@ -399,7 +576,7 @@
         });
 
         // Auto-resize del textarea
-        promptInput.addEventListener('input', function() {
+        promptInput.addEventListener('input', function () {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
             if (this.value === '') {
@@ -438,6 +615,46 @@
             } catch (error) {
                 console.error('Error de red:', error);
             }
+        });
+
+        // --- Lógica de Terminal ---
+        const terminalPanel = document.getElementById('terminal-panel');
+        const terminalOutput = document.getElementById('terminal-output');
+        const termInput = document.getElementById('term-input');
+        const termSend = document.getElementById('term-send');
+
+        document.getElementById('terminal-toggle').addEventListener('click', () => {
+            terminalPanel.style.display = (terminalPanel.style.display === 'flex') ? 'none' : 'flex';
+            if (terminalPanel.style.display === 'flex') termInput.focus();
+        });
+
+        function fillAndShowTerminal(cmd) {
+            termInput.value = cmd;
+            terminalPanel.style.display = 'flex';
+            termInput.focus();
+        }
+
+        function runCommand() {
+            const cmd = termInput.value.trim();
+            if (!cmd) return;
+            
+            terminalOutput.innerHTML += `\n<span style="color:var(--primary-accent)">$ ${cmd}</span>\n`;
+            socket.emit('execute_terminal_command', { command: cmd });
+            termInput.value = '';
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        }
+
+        termSend.addEventListener('click', runCommand);
+        termInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') runCommand(); });
+
+        socket.on('terminal_status', (data) => {
+            terminalOutput.innerHTML += `<span style="color:#fab387">${data.message}</span>\n`;
+        });
+
+        socket.on('terminal_output', (data) => {
+            const color = data.isError ? '#f38ba8' : '#a6e3a1';
+            terminalOutput.innerHTML += `<span style="color:${color}">${data.output}</span>\n`;
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
         });
     </script>
 </body>
