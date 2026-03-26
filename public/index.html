@@ -384,6 +384,45 @@
             display: inline-block;
         }
 
+        /* Estilos CLI */
+        .terminal-prompt {
+            color: var(--primary-accent);
+            font-weight: bold;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+
+        #term-cursor-line {
+            display: inline-flex;
+            width: 100%;
+            align-items: center;
+        }
+
+        .caret {
+            display: inline-block;
+            width: 8px;
+            height: 1.2rem;
+            background: var(--primary-accent);
+            margin-left: 2px;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        #term-hidden-input {
+            position: absolute;
+            left: -9999px;
+            top: 0;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+
+
+
 
     </style>
 </head>
@@ -418,15 +457,24 @@
 
     <div id="terminal-panel">
         <div class="terminal-header">
-            <span style="font-size: 0.8rem; font-weight: 600; color: var(--primary-accent);">TERMINAL REMOTA</span>
-            <button onclick="document.getElementById('terminal-panel').style.display='none'" style="background:transparent; border:none; color:white; cursor:pointer;">✕</button>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--primary-accent);">TERMINAL CLI</span>
+            <div style="display: flex; gap: 0.8rem; align-items: center;">
+                <button id="term-send" style="background: var(--primary-accent); border:none; color:white; padding:0.2rem 0.6rem; border-radius:0.4rem; font-size: 0.7rem; font-weight: bold;">ENVIAR</button>
+                <button onclick="document.getElementById('terminal-panel').style.display='none'" style="background:transparent; border:none; color:white; cursor:pointer;">✕</button>
+            </div>
         </div>
-        <div id="terminal-output">Esperando comandos...</div>
-        <div class="terminal-input-area">
-            <input type="text" id="term-input" placeholder="Comando de sistema...">
-            <button id="term-send" style="background: var(--primary-accent); border:none; color:white; padding:0 1rem; border-radius:0.4rem;">sh</button>
+        <div id="terminal-output" onclick="focusTerminal()">
+            <div id="terminal-history"></div>
+            <div id="term-cursor-line">
+                <span class="terminal-prompt">PS C:\></span>
+                <span id="term-visual-text"></span>
+                <span class="caret"></span>
+            </div>
         </div>
+        <input type="text" id="term-hidden-input" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
     </div>
+
+
     
     <div class="footer">
         <textarea id="prompt-input" disabled placeholder="Enviar una instrucción (Shift+Enter para salto de línea)..."
@@ -464,11 +512,84 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        function renderAgentJSON(parsed, rawFallback) {
+            try {
+                let html = `<div class="ag-json-response">`;
+                if (parsed.mensaje) {
+                    const renderedMsg = marked.parse(parsed.mensaje);
+                    html += `<div class="ag-msg">🤖 ${renderedMsg}</div>`;
+                } else {
+                    html += `<div class="ag-msg">🤖 Respuesta recibida</div>`;
+                }
+
+                if (parsed.comando_sugerido) {
+                    const encodedCmd = btoa(unescape(encodeURIComponent(parsed.comando_sugerido)));
+                    const encodedDir = parsed.directorio_objetivo ? btoa(unescape(encodeURIComponent(parsed.directorio_objetivo))) : '';
+                    
+                    html += `<div style="margin-top:0.5rem;">
+                        <span style="font-size:0.7rem; color:var(--text-muted); display:block;">PROPUESA DE COMANDO:</span>
+                        <code style="display:block; margin: 0.3rem 0;">${parsed.comando_sugerido}</code>
+                        <button class="btn-suggested" onclick="fillAndShowTerminal(atob('${encodedCmd}'), '${encodedDir}' ? atob('${encodedDir}') : '')">⚡ Autocompletar Terminal</button>
+                    </div>`;
+                }
+
+                if (parsed.plan && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
+                    html += `<div class="ag-plan"><strong>Plan de Acción:</strong><ul>`;
+                    parsed.plan.forEach(item => {
+                        let safeItem = item;
+                        try {
+                            // Usamos parse regular y quitamos las etiquetas <p> para que encaje en el <li>
+                            safeItem = marked.parse(item).replace(/^<p>/, '').replace(/<\/p>\n?$/, '');
+                        } catch(e) {}
+                        html += `<li>${safeItem}</li>`;
+                    });
+                    html += `</ul></div>`;
+                }
+
+                if (parsed.estado) {
+                    html += `<div class="ag-status">Estado: <span>${parsed.estado}</span></div>`;
+                }
+                html += `</div>`;
+                addHTMLMessage(html, 'received');
+            } catch (err) {
+                console.error("Error renderizando JSON enriquecido:", err);
+                const renderedFallback = marked.parse(rawFallback || '');
+                addHTMLMessage('🤖 ' + renderedFallback, 'received');
+            }
+        }
 
         // 3. Escuchar respuestas del servidor
         socket.on('connect', () => {
             addMessage('🟢 Conectado al IDE Antigravity', 'received');
             document.getElementById("prompt-input").removeAttribute("disabled")
+        });
+
+        socket.on('chat_history', (history) => {
+            // Limpiamos el mensaje de bienvenida inicial si hay historial
+            if (history.length > 0) {
+                chatContainer.innerHTML = '';
+            }
+            history.forEach(msg => {
+                if (msg.role === 'user') {
+                    addMessage(msg.content, 'sent');
+                } else if (msg.role === 'agent') {
+                    try {
+                        let cleanJson = msg.content.trim();
+                        if (cleanJson.startsWith('```json')) {
+                            cleanJson = cleanJson.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+                        } else if (cleanJson.startsWith('```')) {
+                            cleanJson = cleanJson.replace(/^```\n?/, '').replace(/\n?```$/, '');
+                        }
+                        const parsed = JSON.parse(cleanJson);
+                        renderAgentJSON(parsed, msg.content);
+                    } catch (e) {
+                         // Fallback para mensajes antiguos que solo tenían texto
+                         const html = `<div class="ag-json-response"><div class="ag-msg">🤖 ${marked.parse(msg.content)}</div></div>`;
+                         addHTMLMessage(html, 'received');
+                    }
+                }
+            });
+            hljs.highlightAll();
         });
 
         socket.on('prompt_sent', (data) => {
@@ -496,46 +617,9 @@
                 }
 
                 const parsed = JSON.parse(cleanJson);
-
-                // Construir la vista estructurada si es JSON válido
-                let html = `<div class="ag-json-response">`;
-                if (parsed.mensaje) {
-                    // Renderizar el mensaje principal con Markdown
-                    const renderedMsg = marked.parse(parsed.mensaje);
-                    html += `<div class="ag-msg">🤖 ${renderedMsg}</div>`;
-                } else {
-                    html += `<div class="ag-msg">🤖 Respuesta recibida</div>`;
-                }
-
-                if (parsed.comando_sugerido) {
-                    const encodedCmd = btoa(unescape(encodeURIComponent(parsed.comando_sugerido)));
-                    html += `<div style="margin-top:0.5rem;">
-                        <span style="font-size:0.7rem; color:var(--text-muted); display:block;">PROPUESA DE COMANDO:</span>
-                        <code style="display:block; margin: 0.3rem 0;">${parsed.comando_sugerido}</code>
-                        <button class="btn-suggested" onclick="fillAndShowTerminal(atob('${encodedCmd}'))">⚡ Autocompletar Terminal</button>
-                    </div>`;
-                }
-
-                if (parsed.plan && Array.isArray(parsed.plan) && parsed.plan.length > 0) {
-                    html += `<div class="ag-plan"><strong>Plan de Acción:</strong><ul>`;
-                    parsed.plan.forEach(item => {
-                        // También permitimos markdown ligero en los items del plan
-                        html += `<li>${marked.parseInline(item)}</li>`;
-                    });
-                    html += `</ul></div>`;
-                }
-
-                if (parsed.estado) {
-                    html += `<div class="ag-status">Estado: <span>${parsed.estado}</span></div>`;
-                }
-                html += `</div>`;
-
-                addHTMLMessage(html, 'received');
-                
-                // Disparar resaltado de sintaxis
+                renderAgentJSON(parsed, data.response);
                 hljs.highlightAll();
             } catch (err) {
-                // Fallback si la respuesta no es JSON válido: Renderizar como Markdown
                 const renderedFallback = marked.parse(data.response);
                 addHTMLMessage('🤖 ' + renderedFallback, 'received');
                 hljs.highlightAll();
@@ -617,43 +701,73 @@
             }
         });
 
-        // --- Lógica de Terminal ---
+        // --- Lógica de Terminal CLI ---
         const terminalPanel = document.getElementById('terminal-panel');
         const terminalOutput = document.getElementById('terminal-output');
-        const termInput = document.getElementById('term-input');
-        const termSend = document.getElementById('term-send');
+        const terminalHistory = document.getElementById('terminal-history');
+        const termHiddenInput = document.getElementById('term-hidden-input');
+        const termVisualText = document.getElementById('term-visual-text');
+        const termSendBtn = document.getElementById('term-send');
 
         document.getElementById('terminal-toggle').addEventListener('click', () => {
             terminalPanel.style.display = (terminalPanel.style.display === 'flex') ? 'none' : 'flex';
-            if (terminalPanel.style.display === 'flex') termInput.focus();
+            if (terminalPanel.style.display === 'flex') focusTerminal();
         });
 
-        function fillAndShowTerminal(cmd) {
-            termInput.value = cmd;
+        function focusTerminal() {
+            termHiddenInput.focus();
+        }
+
+        // Sincronizar texto visual
+        termHiddenInput.addEventListener('input', () => {
+            // Forzar el cursor al final para evitar escritura al revés en móviles
+            const val = termHiddenInput.value;
+            termHiddenInput.setSelectionRange(val.length, val.length);
+            
+            termVisualText.textContent = val;
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        });
+
+        let currentTargetDir = '';
+
+        function fillAndShowTerminal(cmd, dir) {
+            termHiddenInput.value = cmd;
+            termVisualText.textContent = cmd;
+            if (dir) currentTargetDir = dir;
             terminalPanel.style.display = 'flex';
-            termInput.focus();
+            focusTerminal();
         }
 
         function runCommand() {
-            const cmd = termInput.value.trim();
+            const cmd = termHiddenInput.value.trim();
             if (!cmd) return;
             
-            terminalOutput.innerHTML += `\n<span style="color:var(--primary-accent)">$ ${cmd}</span>\n`;
-            socket.emit('execute_terminal_command', { command: cmd });
-            termInput.value = '';
+            const promptPath = currentTargetDir || 'C:\\';
+            terminalHistory.innerHTML += `<div><span class="terminal-prompt">PS ${promptPath}&gt;</span> ${cmd}</div>`;
+            socket.emit('execute_terminal_command', { command: cmd, cwd: currentTargetDir });
+            
+            termHiddenInput.value = '';
+            termVisualText.textContent = '';
             terminalOutput.scrollTop = terminalOutput.scrollHeight;
         }
 
-        termSend.addEventListener('click', runCommand);
-        termInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') runCommand(); });
+        termSendBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            runCommand();
+        });
+
+        termHiddenInput.addEventListener('keydown', (e) => {
+            if(e.key === 'Enter') runCommand();
+        });
 
         socket.on('terminal_status', (data) => {
-            terminalOutput.innerHTML += `<span style="color:#fab387">${data.message}</span>\n`;
+            terminalHistory.innerHTML += `<div style="color:#fab387">${data.message}</div>`;
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
         });
 
         socket.on('terminal_output', (data) => {
             const color = data.isError ? '#f38ba8' : '#a6e3a1';
-            terminalOutput.innerHTML += `<span style="color:${color}">${data.output}</span>\n`;
+            terminalHistory.innerHTML += `<div style="color:${color}">${data.output}</div>`;
             terminalOutput.scrollTop = terminalOutput.scrollHeight;
         });
     </script>

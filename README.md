@@ -1,49 +1,45 @@
 # Puente Antigravity 🌉
 
-**Puente Antigravity** es una potente herramienta de intermediación (bridge) diseñada para enlazar tu entorno local del **IDE Antigravity** con un cliente remoto en tu red local (como tu teléfono móvil). Esto te permite interactuar en tiempo real con el asistente inteligente incrustado en el IDE de forma inalámbrica y remota.
+**Puente Antigravity** es una potente estación de desarrollo móvil. Nacida originalmente como una herramienta de intermediación (bridge) para enlazar el IDE Antigravity con un cliente remoto local (teléfono móvil), ha evolucionado hasta convertirse en un entorno interactivo completo con ejecución remota, persistencia de datos y renderizado HUD para la IA.
 
-## ✨ Características Principales
-- **Chat en Tiempo Real:** Comunicación fluida mediante arquitectura de WebSockets (`Socket.IO`).
-- **Autenticación Protegida:** Interfaz de acceso `login.html` restringida con manejo de sesiones seguras (`express-session`).
-- **Interfaces Modernas Estructuradas:** El agente formatea nativamente sus respuestas como tarjetas (JSON struct) brindando un chat mucho más ordenado, con estado predictivo y plan de tareas directamente en el móvil.
-- **Inyección por PowerShell:** Utiliza scripts avanzados y APIs nativas de Windows (`user32.dll`) para enfocar automáticamente el IDE local, insertar comandos mediante el portapapeles de forma segura y presionar teclas virtuales de manera invisible al usuario.
+## ✨ Características Premium
+- **Chat Estructurado (JSON HUD):** Los mensajes del agente se reciben como JSON y se renderizan usando `marked.js` y `highlight.js`. La interfaz móvil muestra bloques organizados para *Mensajes*, *Planes de Acción*, y *Estados* de la IA.
+- **Terminal Remota & Auto-Feedback:** Incluye una terminal móvil integrada (estilo CLI fluida). El agente puede sugerir comandos en su HUD que el usuario autocompleta con un clic y ejecuta de forma segura en la computadora host. El resultado (stdout/stderr) es devuelto automáticamente a la IA en un ciclo de "Auto-Feedback".
+- **Directorio Dinámico (CWD):** El sistema permite al agente inyectar dinámicamente un `directorio_objetivo` en sus recomendaciones, ejecutando los comandos de manera remota exactamente en la ruta del proyecto activo del PC host, sin importar dónde se levantó el servidor Node.
+- **Persistencia Robusta:** Todo el flujo del historial conversacional se respalda permanentemente utilizando `sqlite3-tab` y `dbtabla` (en `antigravity.sqlite`), por lo que recargar o regresar al móvil restaura el chat intacto sin pérdida de contexto ni del formato rico visual.
+- **Interacción Bidireccional Segura:** Comunicación Socket.io ultrarrápida observando los cambios locales del IDE a través de wrappers seguros sin comprometer datos nativos. Todo bajo un sistema de autenticación por sesión (`express-session`).
 
 ## 🚀 Requisitos e Instalación
 
 ### Prerrequisitos
 - **Node.js**: Versión 16+ recomendada.
-- **SO**: Windows (necesario para la inyección de focus vía PowerShell).
-- **IDE**: Antigravity activo.
+- **IDE Activo**: Antigravity activo y listo para inyección de texto.
+- **SO**: Funcional en Windows / Ambientes Genéricos con Bash/PowerShell.
 
-### Instalación
-1. Clona o extrae la carpeta del proyecto en **cualquier ubicación de tu directorio** (El código detecta su propia ruta automáticamente de forma portable).
-2. Abre la terminal en esa carpeta e instala los módulos necesarios:
+### Instalación Rápida
+1. Clona el proyecto en tu máquina.
+2. Instala el motor de persistencia y sockets:
    ```bash
-   npm install express socket.io express-session express-socket.io-session dotenv
+   npm install express socket.io express-session express-socket.io-session dotenv sqlite3-tab dbtabla
    ```
-3. Crea un archivo `.env` en la raíz del proyecto para alojar tus credenciales seguras y la configuración de rutas locales. El archivo no se subirá a sistemas de control de versiones y debe contener:
+3. Configura tu `.env` (credenciales y paths).
    ```env
-   APP_PASSWORD=TuContraseñaMaestraAqui
-   AG_PATH='C:\Usuarios\TuUsuario\AppData\Local\Programs\Antigravity\bin\antigravity.cmd'
+   APP_PASSWORD=TuClaveMaestra
+   # Para scripts o integración legacy de entorno
+   AG_PATH='C:\ruta\de\tu\ide\antigravity.cmd'
    ```
-4. Levanta el servidor Node:
+4. Inicia la estación:
    ```bash
    node server.js
    ```
 
-## 📱 Guía de Uso
-1. Asegúrate de tener una instancia del **IDE Antigravity abierta** en tu compu, con el foco listo en el chat del agente.
-2. Comienza la ejecución de `server.js`.
-3. Abre el navegador web en tu dispositivo celular conectado al mismo router o red WiFi.
-4. Digita la dirección mostrada en la consola de tu servidor (ejemplo: `http://192.168.1.10:3000`).
-5. Accede usando la clave guardada en tu `.env`.
-6. Desde la interfaz móvil, ahora puedes mandar prompts al IDE sin estar sentado frente al teclado. Tus mensajes activarán el puente, el código simulará tu tecleo en el chat del IDE y recibirás tu respuesta nativa e inteligente formateada de regreso al dispositivo.
+## 📱 Guía de Uso Integral
+1. Abre `http://<IP-LOCAL>:3000` en tu móvil y digita tu Password Maestra.
+2. Comienza a interactuar. Tu teléfono inyectará texto al archivo o programa IDE físico.
+3. El Agente Inteligente te responderá con módulos enriquecidos (Markdown, Listas de tareas, etc).
+4. Cuando el Agente te sugiera un bloque de código o un comando de sistema (ej. `npm run dev`), toca "⚡ Autocompletar Terminal" en el HUD de tu celular.
+5. El servidor host ejecutará el script invisiblemente y re-inyectará la respuesta natural de tu consola directo al Agente permitiéndole corregir sus propios errores o confirmar el éxito de forma autónoma.
 
-## 🔭 Alcances y Futuro del Proyecto
-
-Puente Antigravity tiene el gran potencial de transformarse en un control remoto maestro en los entornos de programación autónomos guiados por IA:
-
-1. **Gestión Directa por API REST**: En el futuro, si el agente del IDE lo soporta de forma nativa, se podría prescindir del uso de PowerShell (`SendKeys`) logrando interacciones en segundo plano asíncronas limpias.
-2. **Soporte Multi-instancia**: Poder identificar dinámicamente y seleccionar de entre múltiples ventanas del IDE con qué proyecto remoto conectarse.
-3. **Múltiples Bloques (UI Rica en Móvil)**: Ampliar el parser JSON actual del FronEnd para renderizar código fuente Markdown directamente en la pantalla de chat, similar a asistentes completos de Inteligencia Artificial que aplican Syntax Highlighting nativo, convirtiendo tu teléfono de puente a estación de desarrollo ligera auxiliar.
-4. **Reconocimiento de Voz (Web Speech API)**: Integrar un botón en `index.html` para poder mandarle arreglos estructurales a Antigravity simplemente hablándole a tu teléfono mientras observas u operas el servidor a la distancia.
+## 🔭 Futuro: De "Servidor" a "Extensión Nativa"
+La arquitectura actual (Standalone Node Process + SQLite) ha sido designada como la *Semilla Maestro* (`antigravity_extension_blueprint.md`). 
+El objetivo arquitectónico futuro es embeber todo el Backend WebSockets como un plugin de IDE (ej. VSCode Extension / Antigravity Plugin), sustituyendo `child_process.exec` por la inyección CLI nativa del editor y añadiendo emparejamiento automático por código QR local.
